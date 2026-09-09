@@ -294,7 +294,7 @@ const PG  = "https://api.polygon.io";
 
 let state = {
   keys:{finnhub:"", polygon:""},
-  items:[], sort:{by:"vol",dir:-1}, tab:"watch", sortV:1,
+  items:[], sort:{by:"vol",dir:-1}, tab:"watch", sortExplicit:false,
   mode:"gainers", minPrice:5, minVol:1000000
 };
 let quotes={}, names={};          // finnhub
@@ -312,10 +312,10 @@ function load(){
     const saved=r?JSON.parse(r):null;
     if(saved) state=Object.assign(state,saved);
     const n=localStorage.getItem(LS+".names"); if(n) names=JSON.parse(n);
-    // Data saved before the volume default has no sortV of its own. Test the
-    // stored object, not the merged state — Object.assign leaves the default
-    // in place for absent keys, which would make this check always pass.
-    if(saved && saved.sortV!==1){ state.sort={by:"vol",dir:-1}; state.sortV=1; save(); }
+    // Volume stays the default until the user picks a column themselves.
+    // A stored version stamp can't be trusted here: it gets written by any
+    // save() before the migration reads it, which silently no-ops the change.
+    if(!state.sortExplicit) state.sort={by:"vol",dir:-1};
   }catch(e){}
 }
 function save(){
@@ -467,8 +467,8 @@ async function loadEarnings(days,force){
 // Finnhub allows 60 calls/min. A large watchlist would blow through that on
 // every refresh, so live quotes are budgeted and the remainder falls back to
 // Polygon's end-of-day bar (rendered with an "EOD" tag).
-const MAX_LIVE=45, MAX_NAMES=10;
-let rateLimited=false;
+const MAX_LIVE=30, MAX_NAMES=10;
+let rateLimited=false, cooldownUntil=0;
 
 // Try Polygon's reference endpoint for many names at once. Not confirmed
 // available on every plan, so callers must treat false as "fall back".
@@ -495,8 +495,12 @@ async function pool(items,n,fn){
     while(i<items.length && !rateLimited){ const k=i++; await fn(items[k]); }
   }));
 }
-async function refreshWatch(){
+async function refreshWatch(manual){
   if(busy) return;
+  if(!manual && Date.now()<cooldownUntil){
+    setStat("Cooling down after rate limit — "+Math.ceil((cooldownUntil-Date.now())/1000)+"s");
+    return;
+  }
   busy=true; document.getElementById("refresh").disabled=true;
   let msg="";
   try{
@@ -513,7 +517,7 @@ async function refreshWatch(){
           if(q&&q.c){ quotes[it.symbol]=q; delete it.err; } else it.err="No data";
         }catch(e){
           it.err=e.message; msg=e.message;
-          if(/rate limit/i.test(e.message)) rateLimited=true;
+          if(/rate limit/i.test(e.message)){ rateLimited=true; cooldownUntil=Date.now()+65000; }
         }
       });
     }
@@ -1019,9 +1023,10 @@ document.getElementById("rows").addEventListener("change",e=>{
 document.querySelectorAll("#tab-watch th[data-sort]").forEach(th=>th.onclick=()=>{
   const by=th.dataset.sort;
   state.sort={by,dir:state.sort.by===by?-state.sort.dir:(by==="symbol"?1:-1)};
+  state.sortExplicit=true;
   save(); renderWatch();
 });
-document.getElementById("refresh").onclick=()=>refreshWatch();
+document.getElementById("refresh").onclick=()=>{cooldownUntil=0;refreshWatch(true);};
 document.getElementById("keys").onclick=()=>{setupPinned=!setupPinned;render();};
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden && marketOpen()) refreshWatch(); });
 
