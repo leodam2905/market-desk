@@ -533,6 +533,7 @@ async function refreshWatch(){
       setStat("Loading market data…");
       try{ await loadMarket(); }catch(e){ msg=msg||e.message; }
     }
+    cacheEod();
     lastAt=new Date();
   } finally {
     busy=false; document.getElementById("refresh").disabled=false;
@@ -543,17 +544,33 @@ async function refreshWatch(){
 function setStat(t){ document.getElementById("stat").textContent=t; }
 
 /* ---------- derive ---------- */
+// market{} lives only in memory, so without this the Volume column is empty
+// on every page load until a Scan completes — and sorting by it does nothing.
+function cacheEod(){
+  if(!market) return;
+  const c={};
+  state.items.forEach(it=>{
+    const r=market.cur.get(it.symbol); if(!r) return;
+    c[it.symbol]={c:r.c,o:r.o,h:r.h,l:r.l,v:r.v,vw:r.vw,
+                  pv:(market.prev.get(it.symbol)||{}).v};
+  });
+  state.eod=c; save();
+}
+
 function watchRows(){
   return state.items.map(it=>{
     const q=quotes[it.symbol]||{};
-    const bar=market?market.cur.get(it.symbol):null;
+    const live=market?market.cur.get(it.symbol):null;
+    const cached=(state.eod||{})[it.symbol];
+    const bar=live||cached||null;
+    const prevV=live ? ((market.prev.get(it.symbol)||{}).v) : (cached?cached.pv:null);
     const price=q.c!=null?q.c:(bar?bar.c:null);
     const sh=+it.shares||0, avg=+it.cost||0;
     const value=price&&sh?price*sh:null;
     const basis=sh&&avg?sh*avg:null;
     return {...it, q, bar, price, name:names[it.symbol]||"",
       dp:q.dp, d:q.d, vol:bar?bar.v:null,
-      rvol:(bar&&market.prev.get(it.symbol)&&market.prev.get(it.symbol).v)?bar.v/market.prev.get(it.symbol).v:null,
+      rvol:(bar&&prevV)?bar.v/prevV:null,
       value, basis, pl:value!=null&&basis!=null?value-basis:null,
       plPct:value!=null&&basis?(value-basis)/basis*100:null,
       dayPL:price&&sh&&q.d!=null?q.d*sh:null};
@@ -563,8 +580,13 @@ function sortRows(rs){
   const {by,dir}=state.sort;
   return rs.slice().sort((a,b)=>{
     if(by==="symbol") return a.symbol.localeCompare(b.symbol)*dir;
-    let x=a[by],y=b[by];
-    x=(x==null||!isFinite(x))?-Infinity:x; y=(y==null||!isFinite(y))?-Infinity:y;
+    const x=a[by], y=b[by];
+    const xn=(x==null||!isFinite(x)), yn=(y==null||!isFinite(y));
+    // rows with no data go to the bottom whichever way the column is sorted,
+    // rather than producing a NaN comparison that leaves the order untouched
+    if(xn&&yn) return a.symbol.localeCompare(b.symbol);
+    if(xn) return 1;
+    if(yn) return -1;
     return (x-y)*dir;
   });
 }
