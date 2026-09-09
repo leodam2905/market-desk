@@ -1,0 +1,917 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Market Desk</title>
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#fff; --panel-2:#fafbfc; --line:#e3e6ea;
+  --text:#12161c; --muted:#69707d; --faint:#98a0ad;
+  --up:#0f8a4d; --up-bg:#e6f5ec; --down:#c92a37; --down-bg:#fdeaec;
+  --accent:#2f6df6; --accent-bg:#eaf0fe;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.04);
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0e1116; --panel:#161a21; --panel-2:#1b2027; --line:#272d36;
+    --text:#e8ebf0; --muted:#98a1b0; --faint:#6b7482;
+    --up:#3fd07f; --up-bg:#11291d; --down:#ff6b78; --down-bg:#2b1418;
+    --accent:#5b8cff; --accent-bg:#17233f; --shadow:none;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding:22px 20px 64px}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+.hide{display:none!important}
+
+/* header */
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+h1{font-size:18px;font-weight:650;margin:0;letter-spacing:-.01em}
+.spacer{flex:1}
+.src{display:flex;gap:5px;align-items:center;font-size:11px;color:var(--muted)}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:20px;
+  border:1px solid var(--line);background:var(--panel)}
+.chip .d{width:6px;height:6px;border-radius:50%;background:var(--faint)}
+.chip.on .d{background:var(--up)}
+.chip.on{color:var(--text)}
+
+button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);
+  border-radius:7px;padding:6px 11px;cursor:pointer;transition:.12s}
+button:hover{border-color:var(--faint)}
+button:disabled{opacity:.5;cursor:default}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary:hover{filter:brightness(1.07)}
+button.ghost{background:none;border:none;color:var(--muted);padding:4px 7px}
+button.ghost:hover{color:var(--text)}
+
+/* tabs */
+.tabs{display:flex;gap:2px;background:var(--panel);border:1px solid var(--line);
+  border-radius:9px;padding:3px;margin-bottom:16px;width:fit-content}
+.tabs button{border:none;background:none;padding:6px 15px;border-radius:6px;color:var(--muted);font-weight:520}
+.tabs button.on{background:var(--accent-bg);color:var(--accent)}
+
+/* tiles */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;margin-bottom:16px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:13px 15px;box-shadow:var(--shadow)}
+.tile .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:5px}
+.tile .v{font-size:21px;font-weight:620;letter-spacing:-.02em}
+.tile .s{font-size:12px;margin-top:2px;color:var(--muted)}
+
+/* panel + table */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow);overflow:hidden}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:720px}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;
+  text-align:right;padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap;cursor:pointer;user-select:none}
+th:first-child,td:first-child{text-align:left}
+th.plain{cursor:default}
+th .caret{opacity:0;margin-left:3px} th.sorted .caret{opacity:1}
+td{padding:10px 14px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--panel-2)}
+.sym{font-weight:640;letter-spacing:-.01em;cursor:pointer}
+.sym:hover{color:var(--accent)}
+.name{font-size:12px;color:var(--muted);font-weight:400;margin-top:1px;max-width:200px;overflow:hidden;text-overflow:ellipsis}
+.price{font-weight:600}
+.pill{display:inline-block;padding:2px 7px;border-radius:6px;font-weight:600;font-size:12.5px}
+.up{color:var(--up)} .down{color:var(--down)}
+.pill.up{background:var(--up-bg)} .pill.down{background:var(--down-bg)}
+.sub{font-size:12px;color:var(--muted)}
+.err{color:var(--down);font-size:12px}
+.tag{font-size:10.5px;padding:1px 5px;border-radius:4px;background:var(--panel-2);
+  border:1px solid var(--line);color:var(--faint);margin-left:6px;vertical-align:1px}
+
+/* day range */
+.range{width:106px;margin-left:auto}
+.track{position:relative;height:4px;border-radius:3px;background:var(--line);margin:5px 0 3px}
+.fill{position:absolute;top:0;bottom:0;border-radius:3px;background:var(--faint);opacity:.45}
+.mark{position:absolute;top:-3px;width:2px;height:10px;border-radius:1px;background:var(--text)}
+.rlab{display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint)}
+
+.cell-in{width:78px;font:inherit;text-align:right;background:none;border:1px solid transparent;
+  border-radius:5px;padding:3px 5px;color:var(--text);font-variant-numeric:tabular-nums}
+.cell-in:hover{border-color:var(--line)}
+.cell-in:focus{outline:none;border-color:var(--accent);background:var(--bg)}
+
+/* toolbars */
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:11px 14px;background:var(--panel-2)}
+.bar.top{border-bottom:1px solid var(--line)}
+.bar.bottom{border-top:1px solid var(--line)}
+.bar input{font:inherit;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:6px 10px;color:var(--text)}
+.bar input:focus{outline:none;border-color:var(--accent)}
+.bar label{font-size:12px;color:var(--muted)}
+#f-sym{width:104px;text-transform:uppercase;font-weight:600}
+#f-sh,#f-cost{width:98px;text-align:right;font-variant-numeric:tabular-nums}
+.mini{width:112px;text-align:right;font-variant-numeric:tabular-nums}
+.seg{display:flex;gap:2px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:2px}
+.seg button{border:none;background:none;padding:5px 12px;border-radius:6px;color:var(--muted);font-size:13px}
+.seg button.on{background:var(--accent-bg);color:var(--accent);font-weight:560}
+
+/* setup */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:20px;box-shadow:var(--shadow);margin-bottom:16px}
+.card h2{margin:0 0 4px;font-size:15px;font-weight:640}
+.card p{margin:0 0 12px;color:var(--muted);max-width:66ch}
+.prov{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.prov .box{border:1px solid var(--line);border-radius:9px;padding:14px;background:var(--panel-2)}
+.prov h3{margin:0 0 3px;font-size:13.5px;font-weight:640}
+.prov .why{font-size:12px;color:var(--muted);margin-bottom:10px;min-height:32px}
+.prov input{width:100%;font:13px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--panel);
+  border:1px solid var(--line);border-radius:7px;padding:7px 10px;color:var(--text);margin-bottom:8px}
+.prov input:focus{outline:none;border-color:var(--accent)}
+.prov .row{display:flex;gap:8px;align-items:center}
+.msg{font-size:12px;margin-top:7px}
+a{color:var(--accent)}
+.empty{padding:32px 18px;text-align:center;color:var(--muted)}
+.empty b{color:var(--text);font-weight:600}
+
+/* drawer */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.34);opacity:0;pointer-events:none;transition:.16s;z-index:9}
+.scrim.on{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(430px,92vw);background:var(--panel);
+  border-left:1px solid var(--line);z-index:10;transform:translateX(100%);transition:.2s;overflow-y:auto;padding:20px}
+.drawer.on{transform:none}
+.dhead{display:flex;align-items:flex-start;gap:10px;margin-bottom:14px}
+.dhead .t{flex:1}
+.dhead h2{margin:0;font-size:19px;font-weight:660;letter-spacing:-.01em}
+.dhead .n{color:var(--muted);font-size:13px}
+.dstat{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:14px 0}
+.dstat>div{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+.dstat .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.dstat .v{font-size:15px;font-weight:600;margin-top:2px}
+.spark{width:100%;height:76px;display:block;margin:6px 0 2px}
+.sec{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+  margin:18px 0 8px;padding-bottom:5px;border-bottom:1px solid var(--line)}
+.tarow{display:grid;grid-template-columns:88px 1fr auto;gap:8px;align-items:baseline;
+  padding:7px 0;border-bottom:1px solid var(--line)}
+.tarow .tl{font-size:12px;color:var(--muted)}
+.tarow .tv{font-weight:600;font-size:13.5px}
+.tarow .tn{font-size:11.5px;color:var(--faint);text-align:right}
+.tasum{margin-top:10px;font-size:12.5px;color:var(--muted);line-height:1.5}
+.news{display:block;padding:9px 0;border-bottom:1px solid var(--line);text-decoration:none;color:inherit}
+.news:hover .h{color:var(--accent)}
+.news .h{font-size:13px;font-weight:520;line-height:1.4}
+.news .m{font-size:11.5px;color:var(--faint);margin-top:3px}
+footer{margin-top:14px;font-size:12px;color:var(--faint);display:flex;gap:14px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Market Desk</h1>
+    <div class="src">
+      <span class="chip" id="chip-fh"><span class="d"></span>Finnhub</span>
+      <span class="chip" id="chip-pg"><span class="d"></span>Polygon</span>
+    </div>
+    <div class="spacer"></div>
+    <span class="sub" id="stat"></span>
+    <button id="refresh">Refresh</button>
+    <button id="keys" class="ghost">Keys</button>
+  </header>
+
+  <!-- setup -->
+  <section id="setup" class="card hide">
+    <h2>Data sources</h2>
+    <p>Two free providers, each doing what it's best at. Add either or both &mdash; features light up as keys are added. Keys are stored only in this browser and go straight to the provider.</p>
+    <div class="prov">
+      <div class="box">
+        <h3>Finnhub &mdash; live quotes</h3>
+        <div class="why">Real-time price, company names and news for symbols on your watchlist. Free: 60 calls/min.</div>
+        <input id="k-fh" type="password" placeholder="Finnhub API key" autocomplete="off" spellcheck="false">
+        <div class="row">
+          <button class="primary" data-test="finnhub">Connect</button>
+          <a href="https://finnhub.io/register" target="_blank" rel="noreferrer">Get a free key</a>
+        </div>
+        <div class="msg" id="m-fh"></div>
+      </div>
+      <div class="box">
+        <h3>Polygon &mdash; market-wide screening</h3>
+        <div class="why">One call returns every US ticker's daily bar with volume &mdash; that's what powers Movers. Free: 5 calls/min, end-of-day.</div>
+        <input id="k-pg" type="password" placeholder="Polygon API key" autocomplete="off" spellcheck="false">
+        <div class="row">
+          <button class="primary" data-test="polygon">Connect</button>
+          <a href="https://polygon.io/dashboard/signup" target="_blank" rel="noreferrer">Get a free key</a>
+        </div>
+        <div class="msg" id="m-pg"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="tabs">
+    <button data-tab="watch" class="on">Watchlist</button>
+    <button data-tab="movers">Movers</button>
+  </div>
+
+  <!-- WATCHLIST -->
+  <section id="tab-watch">
+    <div class="tiles" id="tiles">
+      <div class="tile"><div class="k">Market value</div><div class="v num" id="t-val">—</div><div class="s" id="t-val-s"></div></div>
+      <div class="tile"><div class="k">Day change</div><div class="v num" id="t-day">—</div><div class="s" id="t-day-s"></div></div>
+      <div class="tile"><div class="k">Total gain / loss</div><div class="v num" id="t-pl">—</div><div class="s" id="t-pl-s"></div></div>
+      <div class="tile"><div class="k">Cost basis</div><div class="v num" id="t-cost">—</div><div class="s" id="t-cost-s"></div></div>
+    </div>
+    <div class="panel">
+      <div class="scroll"><table>
+        <thead><tr>
+          <th data-sort="symbol">Symbol<span class="caret">▾</span></th>
+          <th data-sort="price">Price<span class="caret">▾</span></th>
+          <th data-sort="dp">Change<span class="caret">▾</span></th>
+          <th class="plain">Day range</th>
+          <th data-sort="vol">Volume<span class="caret">▾</span></th>
+          <th class="plain">Shares</th>
+          <th class="plain">Avg cost</th>
+          <th data-sort="value">Value<span class="caret">▾</span></th>
+          <th data-sort="pl">Gain / loss<span class="caret">▾</span></th>
+          <th class="plain"></th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table></div>
+      <div class="empty hide" id="w-empty">No symbols yet — add one below, or pull them from <b>Movers</b>.</div>
+      <form class="bar bottom" id="add">
+        <input id="f-sym" placeholder="AAPL" autocomplete="off" spellcheck="false" required>
+        <input id="f-sh" type="number" step="any" min="0" placeholder="Shares">
+        <input id="f-cost" type="number" step="any" min="0" placeholder="Avg cost">
+        <button class="primary" type="submit">Add</button>
+        <span class="err" id="add-err"></span>
+      </form>
+    </div>
+  </section>
+
+  <!-- MOVERS -->
+  <section id="tab-movers" class="hide">
+    <div class="panel">
+      <div class="bar top">
+        <div class="seg" id="mode">
+          <button data-mode="gainers" class="on">Gainers</button>
+          <button data-mode="losers">Losers</button>
+          <button data-mode="active">Most active</button>
+          <button data-mode="momentum">Momentum</button>
+          <button data-mode="earnings">Earnings</button>
+        </div>
+        <span class="spacer"></span>
+        <label>Min price</label><input class="mini" id="f-minp" type="number" step="any" min="0" value="5">
+        <label>Min volume</label><input class="mini" id="f-minv" type="number" step="100000" min="0" value="1000000">
+        <button id="scan">Scan</button>
+      </div>
+      <div class="scroll"><table>
+        <thead><tr>
+          <th class="plain">Symbol</th>
+          <th class="plain">Close</th>
+          <th class="plain">Change</th>
+          <th class="plain" title="12-month return, excluding the most recent month">12-1 Mom.</th>
+          <th class="plain" title="EPS actual vs estimate, most recent report">EPS surp.</th>
+          <th class="plain">Volume</th>
+          <th class="plain">$ Volume</th>
+          <th class="plain">Vol vs prev</th>
+          <th class="plain">Day range</th>
+          <th class="plain"></th>
+        </tr></thead>
+        <tbody id="m-rows"></tbody>
+      </table></div>
+      <div class="empty" id="m-empty">Add a <b>Polygon</b> key, then hit Scan to rank the whole US market.</div>
+    </div>
+    <footer><span id="m-foot"></span></footer>
+  </section>
+
+  <footer><span id="foot"></span></footer>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer"></aside>
+
+<script>
+"use strict";
+const LS  = "marketdesk.v1";
+const FH  = "https://finnhub.io/api/v1";
+const PG  = "https://api.polygon.io";
+
+let state = {
+  keys:{finnhub:"", polygon:""},
+  items:[], sort:{by:"symbol",dir:1}, tab:"watch",
+  mode:"gainers", minPrice:5, minVol:1000000
+};
+let quotes={}, names={};          // finnhub
+let market=null;                  // {date, prevDate, cur:Map, prev:Map}
+let momo=null;                    // {from, to, map:Map(ticker -> 12-1 % return)}
+let earn=null;                    // {from, to, map:Map(ticker -> {date,act,est,surp})}
+let series={};                    // symbol -> [closes]  (polygon, on demand)
+let earnHist={};                  // symbol -> last quarters (finnhub, on demand)
+let lastAt=null, busy=false, setupPinned=false;
+
+/* ---------- storage ---------- */
+function load(){
+  try{
+    const r=localStorage.getItem(LS); if(r) state=Object.assign(state,JSON.parse(r));
+    const n=localStorage.getItem(LS+".names"); if(n) names=JSON.parse(n);
+  }catch(e){}
+}
+function save(){
+  try{
+    localStorage.setItem(LS,JSON.stringify(state));
+    localStorage.setItem(LS+".names",JSON.stringify(names));
+  }catch(e){}
+}
+
+/* ---------- format ---------- */
+const money=(n,d=2)=>n==null||!isFinite(n)?"—":n.toLocaleString(undefined,{style:"currency",currency:"USD",minimumFractionDigits:d,maximumFractionDigits:d});
+const signed=n=>(n>0?"+":"")+money(n);
+const pct=n=>n==null||!isFinite(n)?"—":(n>0?"+":"")+n.toFixed(2)+"%";
+const cls=n=>n>0?"up":n<0?"down":"";
+function compact(n){
+  if(n==null||!isFinite(n)) return "—";
+  const a=Math.abs(n);
+  if(a>=1e12) return (n/1e12).toFixed(2)+"T";
+  if(a>=1e9)  return (n/1e9).toFixed(2)+"B";
+  if(a>=1e6)  return (n/1e6).toFixed(1)+"M";
+  if(a>=1e3)  return (n/1e3).toFixed(1)+"K";
+  return n.toFixed(0);
+}
+const ymd=d=>new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(d);
+const wd =d=>new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",weekday:"short"}).format(d);
+function marketOpen(){
+  const p=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hour:"2-digit",minute:"2-digit",weekday:"short",hour12:false}).formatToParts(new Date());
+  const g=t=>p.find(x=>x.type===t).value;
+  if(g("weekday")==="Sat"||g("weekday")==="Sun") return false;
+  const m=(+g("hour"))*60+(+g("minute"));
+  return m>=570 && m<960;
+}
+
+/* ---------- providers ---------- */
+async function fh(path){
+  if(!state.keys.finnhub) throw new Error("No Finnhub key");
+  const r=await fetch(FH+path+(path.includes("?")?"&":"?")+"token="+encodeURIComponent(state.keys.finnhub));
+  if(r.status===401) throw new Error("Finnhub key rejected");
+  if(r.status===403) throw new Error("Not available on your Finnhub plan");
+  if(r.status===429) throw new Error("Finnhub rate limit (60/min) — wait a moment");
+  if(!r.ok) throw new Error("Finnhub error "+r.status);
+  return r.json();
+}
+async function pg(path){
+  if(!state.keys.polygon) throw new Error("No Polygon key");
+  const r=await fetch(PG+path+(path.includes("?")?"&":"?")+"apiKey="+encodeURIComponent(state.keys.polygon));
+  if(r.status===401) throw new Error("Polygon key rejected");
+  if(r.status===403){ const e=new Error("Not entitled to this data on your Polygon plan"); e.code=403; throw e; }
+  if(r.status===429) throw new Error("Polygon rate limit: 5 calls/min on free — wait ~60s, then retry");
+  if(!r.ok) throw new Error("Polygon error "+r.status);
+  return r.json();
+}
+
+/* ---------- market-wide load (Polygon) ---------- */
+const toMap=rs=>{const m=new Map(); rs.forEach(r=>m.set(r.T,r)); return m;};
+
+// Today's grouped bar 403s until Polygon publishes it well after the close,
+// so only probe today late in the evening ET; otherwise start at yesterday.
+function startProbeDate(){
+  const hr=+new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hour:"2-digit",hour12:false})
+    .formatToParts(new Date()).find(x=>x.type==="hour").value;
+  const now=new Date();
+  return hr>=20 ? now : new Date(now.getTime()-864e5);
+}
+
+// Walk back from a date to the nearest day that actually has grouped data.
+async function groupedNear(start,maxTries){
+  let d=new Date(start), tries=0, denied=0;
+  while(tries<(maxTries||8)){
+    const w=wd(d);
+    if(w!=="Sat" && w!=="Sun"){
+      const ds=ymd(d);
+      try{
+        const j=await pg("/v2/aggs/grouped/locale/us/market/stocks/"+ds+"?adjusted=true");
+        const rows=j.results||[];
+        if(rows.length) return {date:ds, rows};
+      }catch(e){
+        if(e.code!==403) throw e;
+        denied++;
+        // 3 straight refusals across different dates = the endpoint itself is out of plan
+        if(denied>=3) throw new Error("Polygon plan doesn't include market-wide daily bars, even for older dates");
+      }
+    }
+    d=new Date(d.getTime()-864e5); tries++;
+  }
+  throw new Error("No trading data near "+ymd(new Date(start)));
+}
+
+async function loadMarket(force){
+  if(market && !force) return market;
+  const a=await groupedNear(startProbeDate());
+  const b=await groupedNear(new Date(new Date(a.date+"T12:00:00Z").getTime()-864e5));
+  market={date:a.date, prevDate:b.date, cur:toMap(a.rows), prev:toMap(b.rows)};
+  return market;
+}
+
+// 12-1 momentum: return from ~12 months ago to ~1 month ago, for the whole
+// market in two grouped calls. Skipping the most recent month matters —
+// short-horizon returns tend to reverse, which would poison the signal.
+async function loadMomentum(force){
+  if(momo && !force) return momo;
+  const now=Date.now();
+  const a=await groupedNear(new Date(now-365*864e5));
+  const b=await groupedNear(new Date(now-30*864e5));
+  const ma=toMap(a.rows), mb=toMap(b.rows), map=new Map();
+  mb.forEach((r,t)=>{ const s=ma.get(t); if(s&&s.c>0&&r.c>0) map.set(t,(r.c-s.c)/s.c*100); });
+  momo={from:a.date, to:b.date, map};
+  return momo;
+}
+
+function moversList(){
+  if(!market) return [];
+  const out=[];
+  market.cur.forEach((r,t)=>{
+    const p=market.prev.get(t); if(!p||!p.c) return;
+    if(!(r.c>=state.minPrice) || !(r.v>=state.minVol)) return;
+    if(/[.^]/.test(t)) return;                       // skip warrants/units/indices
+    out.push({symbol:t, price:r.c, o:r.o, h:r.h, l:r.l,
+      chg:(r.c-p.c)/p.c*100, vol:r.v, dvol:r.c*r.v, rvol:p.v?r.v/p.v:null,
+      mom: momo ? (momo.map.has(t)?momo.map.get(t):null) : null,
+      sur: earn ? (earn.map.get(t)||null) : null});
+  });
+  const by={gainers:(a,b)=>b.chg-a.chg, losers:(a,b)=>a.chg-b.chg,
+            active:(a,b)=>b.dvol-a.dvol, momentum:(a,b)=>b.mom-a.mom,
+            earnings:(a,b)=>b.sur.surp-a.sur.surp};
+  const list = state.mode==="momentum" ? out.filter(r=>r.mom!=null)
+             : state.mode==="earnings" ? out.filter(r=>r.sur!=null) : out;
+  return list.sort(by[state.mode]).slice(0,40);
+}
+
+// Earnings surprise for every company reporting in a window — one Finnhub call.
+// Post-earnings drift is the most persistent of the documented anomalies, so
+// this is the highest-value signal available on a free tier.
+async function loadEarnings(days,force){
+  if(earn && !force) return earn;
+  const to=ymd(new Date()), from=ymd(new Date(Date.now()-(days||14)*864e5));
+  const j=await fh("/calendar/earnings?from="+from+"&to="+to);
+  const map=new Map();
+  (j.earningsCalendar||[]).forEach(e=>{
+    if(e.epsActual==null || e.epsEstimate==null || !e.epsEstimate) return;
+    map.set(e.symbol,{date:e.date, act:e.epsActual, est:e.epsEstimate,
+      surp:(e.epsActual-e.epsEstimate)/Math.abs(e.epsEstimate)*100});
+  });
+  earn={from,to,map};
+  return earn;
+}
+
+/* ---------- watchlist refresh (Finnhub + Polygon volume) ---------- */
+async function refreshWatch(){
+  if(busy) return;
+  busy=true; document.getElementById("refresh").disabled=true;
+  let msg="";
+  try{
+    if(state.keys.finnhub && state.items.length){
+      setStat("Updating quotes…");
+      await Promise.all(state.items.map(async it=>{
+        try{
+          const q=await fh("/quote?symbol="+encodeURIComponent(it.symbol));
+          if(q&&q.c){ quotes[it.symbol]=q; delete it.err; } else it.err="No data";
+        }catch(e){ it.err=e.message; msg=e.message; }
+      }));
+      await Promise.all(state.items.map(async it=>{
+        if(names[it.symbol]!==undefined) return;
+        try{ const p=await fh("/stock/profile2?symbol="+encodeURIComponent(it.symbol));
+             names[it.symbol]=(p&&p.name)||""; }catch(e){ names[it.symbol]=""; }
+      }));
+    }
+    if(state.keys.polygon && !market){
+      setStat("Loading market data…");
+      try{ await loadMarket(); }catch(e){ msg=msg||e.message; }
+    }
+    lastAt=new Date();
+  } finally {
+    busy=false; document.getElementById("refresh").disabled=false;
+    save(); render();
+    setStat(msg || (marketOpen()?"Market open":"Market closed"));
+  }
+}
+function setStat(t){ document.getElementById("stat").textContent=t; }
+
+/* ---------- derive ---------- */
+function watchRows(){
+  return state.items.map(it=>{
+    const q=quotes[it.symbol]||{};
+    const bar=market?market.cur.get(it.symbol):null;
+    const price=q.c!=null?q.c:(bar?bar.c:null);
+    const sh=+it.shares||0, avg=+it.cost||0;
+    const value=price&&sh?price*sh:null;
+    const basis=sh&&avg?sh*avg:null;
+    return {...it, q, bar, price, name:names[it.symbol]||"",
+      dp:q.dp, d:q.d, vol:bar?bar.v:null,
+      rvol:(bar&&market.prev.get(it.symbol)&&market.prev.get(it.symbol).v)?bar.v/market.prev.get(it.symbol).v:null,
+      value, basis, pl:value!=null&&basis!=null?value-basis:null,
+      plPct:value!=null&&basis?(value-basis)/basis*100:null,
+      dayPL:price&&sh&&q.d!=null?q.d*sh:null};
+  });
+}
+function sortRows(rs){
+  const {by,dir}=state.sort;
+  return rs.slice().sort((a,b)=>{
+    if(by==="symbol") return a.symbol.localeCompare(b.symbol)*dir;
+    let x=a[by],y=b[by];
+    x=(x==null||!isFinite(x))?-Infinity:x; y=(y==null||!isFinite(y))?-Infinity:y;
+    return (x-y)*dir;
+  });
+}
+
+/* ---------- pieces ---------- */
+function rangeBar(o,h,l,c){
+  if(![o,h,l,c].every(v=>v!=null&&isFinite(v))||h<=l) return "—";
+  const s=h-l, pc=Math.min(100,Math.max(0,(c-l)/s*100)), po=Math.min(100,Math.max(0,(o-l)/s*100));
+  const lo=Math.min(pc,po), hi=Math.max(pc,po);
+  return '<div class="range"><div class="track"><div class="fill" style="left:'+lo+'%;width:'+(hi-lo)+'%"></div>'
+    +'<div class="mark" style="left:calc('+pc+'% - 1px)"></div></div>'
+    +'<div class="rlab num"><span>'+l.toFixed(2)+'</span><span>'+h.toFixed(2)+'</span></div></div>';
+}
+/* ---------- technical indicators ---------- */
+function sma(v,n){ if(v.length<n) return null; let s=0; for(let i=v.length-n;i<v.length;i++) s+=v[i]; return s/n; }
+function emaSeries(v,n){
+  if(v.length<n) return [];
+  const k=2/(n+1), out=new Array(n-1).fill(null);
+  let e=v.slice(0,n).reduce((a,b)=>a+b,0)/n; out.push(e);
+  for(let i=n;i<v.length;i++){ e=v[i]*k+e*(1-k); out.push(e); }
+  return out;
+}
+function rsi(v,n){                       // Wilder's smoothing
+  if(v.length<n+1) return null;
+  let g=0,l=0;
+  for(let i=1;i<=n;i++){ const d=v[i]-v[i-1]; d>=0 ? g+=d : l-=d; }
+  g/=n; l/=n;
+  for(let i=n+1;i<v.length;i++){
+    const d=v[i]-v[i-1];
+    g=(g*(n-1)+(d>0?d:0))/n;
+    l=(l*(n-1)+(d<0?-d:0))/n;
+  }
+  if(l===0) return 100;
+  return 100-100/(1+g/l);
+}
+function macd(v){
+  if(v.length<35) return null;
+  const e12=emaSeries(v,12), e26=emaSeries(v,26);
+  const line=v.map((_,i)=>(e12[i]!=null&&e26[i]!=null)?e12[i]-e26[i]:null).filter(x=>x!=null);
+  if(line.length<9) return null;
+  const sig=emaSeries(line,9);
+  const L=line[line.length-1], S=sig[sig.length-1];
+  return {line:L, signal:S, hist:L-S};
+}
+function atr(bars,n){
+  if(bars.length<n+1) return null;
+  const tr=[];
+  for(let i=1;i<bars.length;i++){
+    const pc=bars[i-1].c;
+    tr.push(Math.max(bars[i].h-bars[i].l, Math.abs(bars[i].h-pc), Math.abs(bars[i].l-pc)));
+  }
+  let a=tr.slice(0,n).reduce((x,y)=>x+y,0)/n;
+  for(let i=n;i<tr.length;i++) a=(a*(n-1)+tr[i])/n;
+  return a;
+}
+function technicals(bars){
+  if(!bars||bars.length<30) return null;
+  const c=bars.map(b=>b.c), last=c[c.length-1];
+  const win=bars.slice(-252), hi=Math.max(...win.map(b=>b.h)), lo=Math.min(...win.map(b=>b.l));
+  const a=atr(bars,14);
+  return {
+    last, bars:bars.length,
+    sma20:sma(c,20), sma50:sma(c,50), sma200:sma(c,200),
+    rsi14:rsi(c,14), macd:macd(c),
+    hi52:hi, lo52:lo, pos52:(hi>lo)?(last-lo)/(hi-lo)*100:null,
+    atr:a, atrPct:a?a/last*100:null
+  };
+}
+function taRow(label,value,state,note){
+  const k=state==="up"?"up":state==="down"?"down":"";
+  return '<div class="tarow"><span class="tl">'+label+'</span>'
+    +'<span class="tv num '+k+'">'+value+'</span>'
+    +'<span class="tn">'+(note||"")+'</span></div>';
+}
+function renderTA(t){
+  if(!t) return '<div class="sub">Not enough history for indicators.</div>';
+  const vs=(p,n)=>p==null?null:((t.last-p)/p*100);
+  const maRow=(n,p)=>{
+    if(p==null) return taRow(n,"—","","needs "+n.replace("SMA","")+" bars");
+    const d=vs(p);
+    return taRow(n,money(p),d>=0?"up":"down","close "+pct(d));
+  };
+  let out='';
+  out+=maRow("SMA20",t.sma20)+maRow("SMA50",t.sma50)+maRow("SMA200",t.sma200);
+  if(t.rsi14!=null){
+    const r=t.rsi14;
+    out+=taRow("RSI (14)", r.toFixed(1), r>=70?"down":r<=30?"up":"",
+      r>=70?"overbought":r<=30?"oversold":"neutral");
+  }
+  if(t.macd) out+=taRow("MACD hist", t.macd.hist.toFixed(2), t.macd.hist>=0?"up":"down",
+      t.macd.hist>=0?"above signal":"below signal");
+  if(t.pos52!=null) out+=taRow("52-wk range", t.pos52.toFixed(0)+"%","",
+      money(t.lo52,2)+" – "+money(t.hi52,2));
+  if(t.atrPct!=null) out+=taRow("ATR (14)", t.atrPct.toFixed(2)+"%","","daily volatility");
+
+  // descriptive state, not a recommendation
+  const ups=[t.sma20,t.sma50,t.sma200].filter(p=>p!=null&&t.last>p).length;
+  const tot=[t.sma20,t.sma50,t.sma200].filter(p=>p!=null).length;
+  const trend = tot===0 ? "" :
+    ups===tot ? "Above all "+tot+" moving averages." :
+    ups===0   ? "Below all "+tot+" moving averages." :
+                "Above "+ups+" of "+tot+" moving averages.";
+  out+='<div class="tasum">'+trend+' Based on '+t.bars+' daily bars.</div>';
+  return out;
+}
+
+function sparkline(vals){
+  if(!vals||vals.length<2) return '<div class="sub">No history available</div>';
+  const w=380,h=76,p=4, mn=Math.min(...vals), mx=Math.max(...vals), s=(mx-mn)||1;
+  const pts=vals.map((v,i)=>[p+i*(w-2*p)/(vals.length-1), h-p-(v-mn)/s*(h-2*p)]);
+  const up=vals[vals.length-1]>=vals[0];
+  const col=up?"var(--up)":"var(--down)";
+  const line=pts.map(q=>q[0].toFixed(1)+","+q[1].toFixed(1)).join(" ");
+  const area=line+" "+pts[pts.length-1][0].toFixed(1)+","+h+" "+p+","+h;
+  return '<svg class="spark" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'
+    +'<polygon points="'+area+'" fill="'+col+'" opacity=".12"/>'
+    +'<polyline points="'+line+'" fill="none" stroke="'+col+'" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+}
+
+/* ---------- render ---------- */
+function render(){
+  const hasFH=!!state.keys.finnhub, hasPG=!!state.keys.polygon;
+  document.getElementById("chip-fh").className="chip"+(hasFH?" on":"");
+  document.getElementById("chip-pg").className="chip"+(hasPG?" on":"");
+  document.getElementById("setup").classList.toggle("hide",(hasFH||hasPG)&&!setupPinned);
+
+  document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===state.tab));
+  document.getElementById("tab-watch").classList.toggle("hide",state.tab!=="watch");
+  document.getElementById("tab-movers").classList.toggle("hide",state.tab!=="movers");
+
+  state.tab==="watch" ? renderWatch() : renderMovers();
+  document.getElementById("foot").textContent =
+    (lastAt?"Updated "+lastAt.toLocaleTimeString():"") +
+    (market?"  ·  Market data "+market.date:"");
+}
+
+function renderWatch(){
+  const rs=sortRows(watchRows());
+  document.getElementById("w-empty").classList.toggle("hide",rs.length>0);
+  document.getElementById("rows").innerHTML=rs.map(r=>{
+    const chg=(r.d!=null&&r.dp!=null)
+      ? '<span class="pill '+cls(r.dp)+'">'+pct(r.dp)+'</span><div class="sub num '+cls(r.d)+'">'+signed(r.d)+'</div>'
+      : (r.err?'<span class="err">'+r.err+'</span>':'—');
+    const pl=r.pl!=null
+      ? '<span class="num '+cls(r.pl)+'" style="font-weight:600">'+signed(r.pl)+'</span><div class="sub num '+cls(r.pl)+'">'+pct(r.plPct)+'</div>'
+      : '—';
+    const vol=r.vol!=null
+      ? '<span class="num">'+compact(r.vol)+'</span>'+(r.rvol?'<div class="sub num">'+r.rvol.toFixed(2)+'× prev</div>':'')
+      : '—';
+    const q=r.q||{};
+    return '<tr data-sym="'+r.symbol+'">'
+      +'<td><div class="sym" data-open="'+r.symbol+'">'+r.symbol+'</div>'+(r.name?'<div class="name">'+r.name+'</div>':'')+'</td>'
+      +'<td class="num price">'+money(r.price)+(r.q.c==null&&r.bar?'<span class="tag">EOD</span>':'')+'</td>'
+      +'<td>'+chg+'</td>'
+      +'<td>'+rangeBar(q.o,q.h,q.l,q.c)+'</td>'
+      +'<td>'+vol+'</td>'
+      +'<td><input class="cell-in num" data-f="shares" value="'+(r.shares||"")+'" placeholder="—" inputmode="decimal"></td>'
+      +'<td><input class="cell-in num" data-f="cost" value="'+(r.cost||"")+'" placeholder="—" inputmode="decimal"></td>'
+      +'<td class="num">'+(r.value!=null?money(r.value):"—")+'</td>'
+      +'<td>'+pl+'</td>'
+      +'<td><button class="ghost" data-del="'+r.symbol+'">✕</button></td></tr>';
+  }).join("");
+
+  const held=rs.filter(r=>r.value!=null);
+  const val=held.reduce((s,r)=>s+r.value,0);
+  const cost=rs.reduce((s,r)=>s+(r.basis||0),0);
+  const day=rs.reduce((s,r)=>s+(r.dayPL||0),0);
+  const pl=val&&cost?val-cost:0;
+  const set=(id,v,s,k)=>{const e=document.getElementById(id);e.textContent=v;e.className="v num "+(k||"");
+    document.getElementById(id+"-s").textContent=s;};
+  set("t-val", held.length?money(val):"—", held.length+" position"+(held.length===1?"":"s"));
+  set("t-day", held.length?signed(day):"—", val?pct(day/(val-day)*100):"", cls(day));
+  set("t-pl",  cost?signed(pl):"—", cost?pct(pl/cost*100):"", cls(pl));
+  set("t-cost",cost?money(cost):"—", cost?"invested":"add shares & cost");
+
+  document.querySelectorAll("#tab-watch th[data-sort]").forEach(th=>{
+    const on=th.dataset.sort===state.sort.by;
+    th.classList.toggle("sorted",on);
+    th.querySelector(".caret").textContent=state.sort.dir>0?"▴":"▾";
+  });
+}
+
+function renderMovers(){
+  const rs=moversList();
+  document.getElementById("m-empty").classList.toggle("hide",rs.length>0);
+  if(!state.keys.polygon)
+    document.getElementById("m-empty").innerHTML='Add a <b>Polygon</b> key to scan the market — the Keys button, top right.';
+  else if(!market)
+    document.getElementById("m-empty").innerHTML='Hit <b>Scan</b> to rank the whole US market.';
+  else if(!rs.length)
+    document.getElementById("m-empty").innerHTML =
+        (state.mode==="momentum" && !momo) ? 'Loading 12-month momentum…'
+      : (state.mode==="earnings" && !state.keys.finnhub) ? 'Earnings surprise needs a <b>Finnhub</b> key.'
+      : (state.mode==="earnings" && !earn) ? 'Loading earnings surprises…'
+      : (state.mode==="earnings") ? 'No companies reported in the last 14 days pass these filters.'
+      : 'No symbols pass these filters — try lowering min price or volume.';
+
+  document.getElementById("m-rows").innerHTML=rs.map(r=>{
+    const own=state.items.some(i=>i.symbol===r.symbol);
+    return '<tr>'
+      +'<td><div class="sym" data-open="'+r.symbol+'">'+r.symbol+'</div>'+(names[r.symbol]?'<div class="name">'+names[r.symbol]+'</div>':'')+'</td>'
+      +'<td class="num price">'+money(r.price)+'</td>'
+      +'<td><span class="pill '+cls(r.chg)+'">'+pct(r.chg)+'</span></td>'
+      +'<td class="num '+(r.mom!=null?cls(r.mom):"")+'">'+(r.mom!=null?pct(r.mom):"—")+'</td>'
+      +'<td class="num '+(r.sur?cls(r.sur.surp):"")+'">'
+        +(r.sur?pct(r.sur.surp)+'<div class="sub num">'+r.sur.date+'</div>':"—")+'</td>'
+      +'<td class="num">'+compact(r.vol)+'</td>'
+      +'<td class="num">'+compact(r.dvol)+'</td>'
+      +'<td class="num'+(r.rvol&&r.rvol>=2?" up":"")+'">'+(r.rvol?r.rvol.toFixed(2)+"×":"—")+'</td>'
+      +'<td>'+rangeBar(r.o,r.h,r.l,r.price)+'</td>'
+      +'<td>'+(own?'<span class="sub">on list</span>':'<button class="ghost" data-add="'+r.symbol+'">+ Add</button>')+'</td></tr>';
+  }).join("");
+  document.getElementById("m-foot").textContent = market
+    ? rs.length+" of "+market.cur.size.toLocaleString()+" US tickers · "+market.date+" vs "+market.prevDate
+      +(momo?"  ·  12-1 momentum "+momo.from+" → "+momo.to:"")
+      +(earn?"  ·  earnings since "+earn.from:"") : "";
+}
+
+/* ---------- detail drawer ---------- */
+async function openSym(sym){
+  const d=document.getElementById("drawer");
+  document.getElementById("scrim").classList.add("on"); d.classList.add("on");
+  const q=quotes[sym]||{}, bar=market?market.cur.get(sym):null;
+  const price=q.c!=null?q.c:(bar?bar.c:null);
+  d.innerHTML='<div class="dhead"><div class="t"><h2>'+sym+'</h2><div class="n">'+(names[sym]||"")+'</div></div>'
+    +'<button class="ghost" id="dclose">✕</button></div>'
+    +'<div style="font-size:26px;font-weight:660" class="num">'+money(price)+'</div>'
+    +(q.dp!=null?'<div class="num '+cls(q.dp)+'" style="font-weight:600">'+signed(q.d)+' ('+pct(q.dp)+')</div>':'')
+    +'<div class="dstat">'
+      +'<div><div class="k">Open</div><div class="v num">'+money(q.o!=null?q.o:(bar?bar.o:null))+'</div></div>'
+      +'<div><div class="k">Prev close</div><div class="v num">'+money(q.pc)+'</div></div>'
+      +'<div><div class="k">Day high</div><div class="v num">'+money(q.h!=null?q.h:(bar?bar.h:null))+'</div></div>'
+      +'<div><div class="k">Day low</div><div class="v num">'+money(q.l!=null?q.l:(bar?bar.l:null))+'</div></div>'
+      +'<div><div class="k">Volume</div><div class="v num">'+compact(bar?bar.v:null)+'</div></div>'
+      +'<div><div class="k">VWAP</div><div class="v num">'+money(bar?bar.vw:null)+'</div></div>'
+    +'</div>'
+    +'<div class="sec">30-day trend <span style="text-transform:none;letter-spacing:0">· Polygon</span></div>'
+    +'<div id="d-spark"><div class="sub">Loading…</div></div>'
+    +'<div class="sec">Technicals <span style="text-transform:none;letter-spacing:0">· Polygon</span></div>'
+    +'<div id="d-ta"><div class="sub">Loading…</div></div>'
+    +'<div class="sec">Earnings history <span style="text-transform:none;letter-spacing:0">· Finnhub</span></div>'
+    +'<div id="d-earn"><div class="sub">Loading…</div></div>'
+    +'<div class="sec">Recent news <span style="text-transform:none;letter-spacing:0">· Finnhub</span></div>'
+    +'<div id="d-news"><div class="sub">Loading…</div></div>';
+  document.getElementById("dclose").onclick=closeDrawer;
+
+  // sparkline (Polygon aggregates, cached)
+  const sp=document.getElementById("d-spark"), ta=document.getElementById("d-ta");
+  const paint=bars=>{
+    sp.innerHTML=sparkline(bars.slice(-30).map(b=>b.c));
+    ta.innerHTML=renderTA(technicals(bars));
+  };
+  if(!state.keys.polygon){
+    sp.innerHTML='<div class="sub">Add a Polygon key for price history.</div>';
+    ta.innerHTML='<div class="sub">Add a Polygon key for indicators.</div>';
+  } else if(series[sym]) paint(series[sym]);
+  else{
+    try{
+      // ~2 years of daily bars: enough for SMA200 and a 52-week range, one call.
+      const to=ymd(new Date()), from=ymd(new Date(Date.now()-730*864e5));
+      const j=await pg("/v2/aggs/ticker/"+encodeURIComponent(sym)+"/range/1/day/"+from+"/"+to+"?adjusted=true&sort=asc&limit=800");
+      series[sym]=(j.results||[]).map(b=>({c:b.c,h:b.h,l:b.l,v:b.v,t:b.t}));
+      paint(series[sym]);
+    }catch(e){ sp.innerHTML='<div class="err">'+e.message+'</div>';
+               ta.innerHTML='<div class="sub">Indicators need price history.</div>'; }
+  }
+  // earnings history (Finnhub)
+  const eh=document.getElementById("d-earn");
+  if(!state.keys.finnhub) eh.innerHTML='<div class="sub">Add a Finnhub key for earnings.</div>';
+  else{
+    try{
+      if(!earnHist[sym]) earnHist[sym]=await fh("/stock/earnings?symbol="+encodeURIComponent(sym));
+      const rows=(earnHist[sym]||[]).slice(0,4);
+      eh.innerHTML = rows.length ? rows.map(e=>{
+        const sp = (e.surprisePercent!=null) ? e.surprisePercent
+                 : (e.estimate ? (e.actual-e.estimate)/Math.abs(e.estimate)*100 : null);
+        return taRow(e.period||(e.year+" Q"+e.quarter),
+          (sp!=null?pct(sp):"—"), sp>=0?"up":"down",
+          "act "+(e.actual!=null?e.actual:"—")+" vs est "+(e.estimate!=null?e.estimate:"—"));
+      }).join("") : '<div class="sub">No earnings history.</div>';
+    }catch(e){ eh.innerHTML='<div class="err">'+e.message+'</div>'; }
+  }
+
+  // news (Finnhub)
+  const nw=document.getElementById("d-news");
+  if(!state.keys.finnhub) nw.innerHTML='<div class="sub">Add a Finnhub key for news.</div>';
+  else{
+    try{
+      const to=ymd(new Date()), from=ymd(new Date(Date.now()-10*864e5));
+      const j=await fh("/company-news?symbol="+encodeURIComponent(sym)+"&from="+from+"&to="+to);
+      const list=(j||[]).slice(0,8);
+      nw.innerHTML=list.length?list.map(n=>'<a class="news" href="'+n.url+'" target="_blank" rel="noreferrer">'
+        +'<div class="h">'+(n.headline||"")+'</div>'
+        +'<div class="m">'+(n.source||"")+' · '+new Date(n.datetime*1000).toLocaleDateString()+'</div></a>').join("")
+        :'<div class="sub">No recent news.</div>';
+    }catch(e){ nw.innerHTML='<div class="err">'+e.message+'</div>'; }
+  }
+}
+function closeDrawer(){
+  document.getElementById("drawer").classList.remove("on");
+  document.getElementById("scrim").classList.remove("on");
+}
+
+/* ---------- events ---------- */
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{
+  state.tab=b.dataset.tab; save(); render();
+});
+document.getElementById("mode").onclick=async e=>{
+  if(!e.target.dataset.mode) return;
+  state.mode=e.target.dataset.mode;
+  document.querySelectorAll("#mode button").forEach(b=>b.classList.toggle("on",b.dataset.mode===state.mode));
+  save(); renderMovers();
+  if(state.mode==="momentum" && !momo && state.keys.polygon){
+    setStat("Loading 12-month momentum (2 calls)…");
+    try{ await loadMomentum(); setStat("Momentum window "+momo.from+" → "+momo.to); }
+    catch(err){ setStat(err.message); }
+    renderMovers();
+  }
+  if(state.mode==="earnings" && !earn && state.keys.finnhub){
+    setStat("Loading earnings surprises (1 call)…");
+    try{ await loadEarnings(14); setStat(earn.map.size+" companies reported since "+earn.from); }
+    catch(err){ setStat(err.message); }
+    renderMovers();
+  }
+};
+document.getElementById("f-minp").onchange=e=>{state.minPrice=+e.target.value||0;save();renderMovers();};
+document.getElementById("f-minv").onchange=e=>{state.minVol=+e.target.value||0;save();renderMovers();};
+
+document.getElementById("scan").onclick=async()=>{
+  const b=document.getElementById("scan"); b.disabled=true; setStat("Scanning market…");
+  try{ await loadMarket(true); setStat("Scanned "+market.cur.size.toLocaleString()+" tickers"); }
+  catch(e){ setStat(e.message); }
+  finally{ b.disabled=false; render(); }
+};
+
+document.querySelectorAll("[data-test]").forEach(btn=>btn.onclick=async()=>{
+  const which=btn.dataset.test;
+  const short=which==="finnhub"?"fh":"pg";
+  const input=document.getElementById("k-"+short), msg=document.getElementById("m-"+short);
+  const v=input.value.trim();
+  if(!v){ msg.className="msg err"; msg.textContent="Paste a key first."; return; }
+  msg.className="msg sub"; msg.textContent="Checking…";
+  const prev=state.keys[which]; state.keys[which]=v;
+  try{
+    if(which==="finnhub"){ const q=await fh("/quote?symbol=AAPL"); if(!q||!q.c) throw new Error("Key works but returned no data"); }
+    else{ await loadMarket(true); }
+    msg.className="msg"; msg.style.color="var(--up)"; msg.textContent="Connected.";
+    input.value=""; save();
+    if(which==="finnhub" && !state.items.length) ["AAPL","MSFT","NVDA"].forEach(s=>state.items.push({symbol:s}));
+    if(state.keys.finnhub && state.keys.polygon) setupPinned=false;
+    render(); refreshWatch();
+  }catch(e){ state.keys[which]=prev; msg.className="msg err"; msg.style.color=""; msg.textContent=e.message; }
+});
+
+document.getElementById("add").onsubmit=e=>{
+  e.preventDefault();
+  const el=document.getElementById("f-sym"), sym=el.value.trim().toUpperCase();
+  const err=document.getElementById("add-err");
+  if(!sym) return;
+  if(state.items.some(i=>i.symbol===sym)){ err.textContent=sym+" is already tracked"; return; }
+  err.textContent="";
+  state.items.push({symbol:sym,
+    shares:parseFloat(document.getElementById("f-sh").value)||undefined,
+    cost:parseFloat(document.getElementById("f-cost").value)||undefined});
+  save(); e.target.reset(); el.focus(); render(); refreshWatch();
+};
+
+document.body.addEventListener("click",e=>{
+  const open=e.target.dataset&&e.target.dataset.open;
+  const del =e.target.dataset&&e.target.dataset.del;
+  const add =e.target.dataset&&e.target.dataset.add;
+  if(open){ openSym(open); return; }
+  if(del){ state.items=state.items.filter(i=>i.symbol!==del); delete quotes[del]; save(); render(); return; }
+  if(add){ state.items.push({symbol:add}); save(); render(); refreshWatch(); return; }
+});
+document.getElementById("scrim").onclick=closeDrawer;
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeDrawer(); });
+
+document.getElementById("rows").addEventListener("change",e=>{
+  if(!e.target.classList.contains("cell-in")) return;
+  const sym=e.target.closest("tr").dataset.sym;
+  const it=state.items.find(i=>i.symbol===sym); if(!it) return;
+  const v=parseFloat(e.target.value);
+  it[e.target.dataset.f]=isFinite(v)&&v>0?v:undefined;
+  save(); render();
+});
+document.querySelectorAll("#tab-watch th[data-sort]").forEach(th=>th.onclick=()=>{
+  const by=th.dataset.sort;
+  state.sort={by,dir:state.sort.by===by?-state.sort.dir:(by==="symbol"?1:-1)};
+  save(); renderWatch();
+});
+document.getElementById("refresh").onclick=()=>refreshWatch();
+document.getElementById("keys").onclick=()=>{setupPinned=!setupPinned;render();};
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden && marketOpen()) refreshWatch(); });
+
+/* ---------- boot ---------- */
+load();
+document.getElementById("f-minp").value=state.minPrice;
+document.getElementById("f-minv").value=state.minVol;
+document.querySelectorAll("#mode button").forEach(b=>b.classList.toggle("on",b.dataset.mode===state.mode));
+render();
+if(state.keys.finnhub||state.keys.polygon) refreshWatch();
+setInterval(()=>{ if(marketOpen()&&!document.hidden) refreshWatch(); },60000);
+</script>
+</body>
+</html>
