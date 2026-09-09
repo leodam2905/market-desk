@@ -237,7 +237,7 @@ footer{margin-top:14px;font-size:12px;color:var(--faint);display:flex;gap:14px;f
         <button class="primary" type="submit">Add</button>
         <span class="err" id="add-err"></span>
         <span class="spacer"></span>
-        <button type="button" id="add-top">+ Top 50 by volume</button>
+        <button type="button" id="add-top">+ Top 200 by volume</button>
         <span class="sub" id="w-count"></span>
       </form>
     </div>
@@ -464,6 +464,25 @@ async function loadEarnings(days,force){
 const MAX_LIVE=45, MAX_NAMES=10;
 let rateLimited=false;
 
+// Try Polygon's reference endpoint for many names at once. Not confirmed
+// available on every plan, so callers must treat false as "fall back".
+async function fillNamesBulk(){
+  if(!state.keys.polygon) return false;
+  const need=state.items.map(i=>i.symbol).filter(x=>names[x]===undefined);
+  if(need.length<10) return false;
+  try{
+    for(let i=0;i<need.length;i+=200){
+      const chunk=need.slice(i,i+200);
+      const j=await pg("/v3/reference/tickers?ticker.any_of="+chunk.join(",")+"&limit=1000");
+      if(!j || !Array.isArray(j.results)) return false;
+      j.results.forEach(r=>{ if(r.ticker) names[r.ticker]=r.name||""; });
+      // mark misses as known-empty so they aren't re-requested every refresh
+      chunk.forEach(x=>{ if(names[x]===undefined) names[x]=""; });
+    }
+    return true;
+  }catch(e){ return false; }
+}
+
 async function pool(items,n,fn){
   let i=0;
   await Promise.all(Array.from({length:Math.min(n,items.length)},async()=>{
@@ -491,12 +510,18 @@ async function refreshWatch(){
           if(/rate limit/i.test(e.message)) rateLimited=true;
         }
       });
-      // names fill in gradually across refreshes rather than all at once
-      const need=state.items.filter(it=>names[it.symbol]===undefined).slice(0,MAX_NAMES);
-      await pool(need,4,async it=>{
-        try{ const p=await fh("/stock/profile2?symbol="+encodeURIComponent(it.symbol));
-             names[it.symbol]=(p&&p.name)||""; }catch(e){ names[it.symbol]=""; }
-      });
+    }
+    // Names: one Polygon call covers hundreds. Runs even without a Finnhub key;
+    // only falls back to Finnhub's per-symbol lookup when bulk is unavailable.
+    if(state.items.length){
+      const bulk=await fillNamesBulk();
+      if(!bulk && state.keys.finnhub && !rateLimited){
+        const need=state.items.filter(it=>names[it.symbol]===undefined).slice(0,MAX_NAMES);
+        await pool(need,4,async it=>{
+          try{ const p=await fh("/stock/profile2?symbol="+encodeURIComponent(it.symbol));
+               names[it.symbol]=(p&&p.name)||""; }catch(e){ names[it.symbol]=""; }
+        });
+      }
     }
     if(state.keys.polygon && !market){
       setStat("Loading market data…");
@@ -932,7 +957,7 @@ document.getElementById("add-top").onclick=()=>{
   if(!market){ setStat("Run Scan on the Movers tab first"); return; }
   const top=[...market.cur.values()]
     .filter(r=>r.c>=5 && !/[.^]/.test(r.T))
-    .sort((a,b)=>b.c*b.v-a.c*a.v).slice(0,50).map(r=>r.T);
+    .sort((a,b)=>b.c*b.v-a.c*a.v).slice(0,200).map(r=>r.T);
   const n=addSymbols(top);
   setStat(n?n+" symbols added":"already tracking those");
   render(); refreshWatch();
