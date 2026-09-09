@@ -231,11 +231,14 @@ footer{margin-top:14px;font-size:12px;color:var(--faint);display:flex;gap:14px;f
       </table></div>
       <div class="empty hide" id="w-empty">No symbols yet — add one below, or pull them from <b>Movers</b>.</div>
       <form class="bar bottom" id="add">
-        <input id="f-sym" placeholder="AAPL" autocomplete="off" spellcheck="false" required>
+        <input id="f-sym" placeholder="AAPL, MSFT, NVDA…" autocomplete="off" spellcheck="false" required>
         <input id="f-sh" type="number" step="any" min="0" placeholder="Shares">
         <input id="f-cost" type="number" step="any" min="0" placeholder="Avg cost">
         <button class="primary" type="submit">Add</button>
         <span class="err" id="add-err"></span>
+        <span class="spacer"></span>
+        <button type="button" id="add-top">+ Top 50 by volume</button>
+        <span class="sub" id="w-count"></span>
       </form>
     </div>
   </section>
@@ -255,6 +258,7 @@ footer{margin-top:14px;font-size:12px;color:var(--faint);display:flex;gap:14px;f
         <label>Min price</label><input class="mini" id="f-minp" type="number" step="any" min="0" value="5">
         <label>Min volume</label><input class="mini" id="f-minv" type="number" step="100000" min="0" value="1000000">
         <button id="scan">Scan</button>
+        <button id="add-all">+ Add all shown</button>
       </div>
       <div class="scroll"><table>
         <thead><tr>
@@ -299,7 +303,7 @@ let momo=null;                    // {from, to, map:Map(ticker -> 12-1 % return)
 let earn=null;                    // {from, to, map:Map(ticker -> {date,act,est,surp})}
 let series={};                    // symbol -> [closes]  (polygon, on demand)
 let earnHist={};                  // symbol -> last quarters (finnhub, on demand)
-let lastAt=null, busy=false, setupPinned=false;
+let lastAt=null, busy=false, setupPinned=false, liveCount=0;
 
 /* ---------- storage ---------- */
 function load(){
@@ -454,24 +458,45 @@ async function loadEarnings(days,force){
 }
 
 /* ---------- watchlist refresh (Finnhub + Polygon volume) ---------- */
+// Finnhub allows 60 calls/min. A large watchlist would blow through that on
+// every refresh, so live quotes are budgeted and the remainder falls back to
+// Polygon's end-of-day bar (rendered with an "EOD" tag).
+const MAX_LIVE=45, MAX_NAMES=10;
+let rateLimited=false;
+
+async function pool(items,n,fn){
+  let i=0;
+  await Promise.all(Array.from({length:Math.min(n,items.length)},async()=>{
+    while(i<items.length && !rateLimited){ const k=i++; await fn(items[k]); }
+  }));
+}
 async function refreshWatch(){
   if(busy) return;
   busy=true; document.getElementById("refresh").disabled=true;
   let msg="";
   try{
     if(state.keys.finnhub && state.items.length){
-      setStat("Updating quotes…");
-      await Promise.all(state.items.map(async it=>{
+      rateLimited=false;
+      // holdings first — those are the prices you actually care about being live
+      const ordered=state.items.slice().sort((a,b)=>(b.shares?1:0)-(a.shares?1:0));
+      const live=ordered.slice(0,MAX_LIVE);
+      liveCount=live.length;
+      setStat("Updating "+live.length+" quote"+(live.length===1?"":"s")+"…");
+      await pool(live,6,async it=>{
         try{
           const q=await fh("/quote?symbol="+encodeURIComponent(it.symbol));
           if(q&&q.c){ quotes[it.symbol]=q; delete it.err; } else it.err="No data";
-        }catch(e){ it.err=e.message; msg=e.message; }
-      }));
-      await Promise.all(state.items.map(async it=>{
-        if(names[it.symbol]!==undefined) return;
+        }catch(e){
+          it.err=e.message; msg=e.message;
+          if(/rate limit/i.test(e.message)) rateLimited=true;
+        }
+      });
+      // names fill in gradually across refreshes rather than all at once
+      const need=state.items.filter(it=>names[it.symbol]===undefined).slice(0,MAX_NAMES);
+      await pool(need,4,async it=>{
         try{ const p=await fh("/stock/profile2?symbol="+encodeURIComponent(it.symbol));
              names[it.symbol]=(p&&p.name)||""; }catch(e){ names[it.symbol]=""; }
-      }));
+      });
     }
     if(state.keys.polygon && !market){
       setStat("Loading market data…");
@@ -684,6 +709,12 @@ function renderWatch(){
   set("t-pl",  cost?signed(pl):"—", cost?pct(pl/cost*100):"", cls(pl));
   set("t-cost",cost?money(cost):"—", cost?"invested":"add shares & cost");
 
+  const wc=document.getElementById("w-count");
+  wc.textContent = state.items.length
+    ? state.items.length+" symbols"
+      + (liveCount && liveCount<state.items.length ? " · "+liveCount+" live, rest EOD" : "")
+    : "";
+
   document.querySelectorAll("#tab-watch th[data-sort]").forEach(th=>{
     const on=th.dataset.sort===state.sort.by;
     th.classList.toggle("sorted",on);
@@ -863,17 +894,54 @@ document.querySelectorAll("[data-test]").forEach(btn=>btn.onclick=async()=>{
   }catch(e){ state.keys[which]=prev; msg.className="msg err"; msg.style.color=""; msg.textContent=e.message; }
 });
 
+// Accepts anything separable: "AAPL, MSFT NVDA;GOOGL" or a pasted column.
+function parseSymbols(text){
+  return [...new Set((text||"").toUpperCase().split(/[^A-Z0-9.\-]+/).filter(Boolean))];
+}
+function addSymbols(list,opts){
+  const have=new Set(state.items.map(i=>i.symbol));
+  let added=0;
+  list.forEach(sym=>{
+    if(!sym || have.has(sym)) return;
+    have.add(sym);
+    state.items.push(Object.assign({symbol:sym},opts||{}));
+    added++;
+  });
+  if(added) save();
+  return added;
+}
+
 document.getElementById("add").onsubmit=e=>{
   e.preventDefault();
-  const el=document.getElementById("f-sym"), sym=el.value.trim().toUpperCase();
+  const el=document.getElementById("f-sym");
+  const syms=parseSymbols(el.value);
   const err=document.getElementById("add-err");
-  if(!sym) return;
-  if(state.items.some(i=>i.symbol===sym)){ err.textContent=sym+" is already tracked"; return; }
-  err.textContent="";
-  state.items.push({symbol:sym,
-    shares:parseFloat(document.getElementById("f-sh").value)||undefined,
-    cost:parseFloat(document.getElementById("f-cost").value)||undefined});
-  save(); e.target.reset(); el.focus(); render(); refreshWatch();
+  if(!syms.length) return;
+  // shares/cost only make sense for a single symbol
+  const opts = syms.length===1 ? {
+      shares:parseFloat(document.getElementById("f-sh").value)||undefined,
+      cost:parseFloat(document.getElementById("f-cost").value)||undefined
+    } : {};
+  const n=addSymbols(syms,opts);
+  err.textContent = n ? "" : (syms.length===1 ? syms[0]+" already tracked" : "all already tracked");
+  if(n) e.target.reset();
+  el.focus(); render(); refreshWatch();
+};
+
+document.getElementById("add-top").onclick=()=>{
+  if(!market){ setStat("Run Scan on the Movers tab first"); return; }
+  const top=[...market.cur.values()]
+    .filter(r=>r.c>=5 && !/[.^]/.test(r.T))
+    .sort((a,b)=>b.c*b.v-a.c*a.v).slice(0,50).map(r=>r.T);
+  const n=addSymbols(top);
+  setStat(n?n+" symbols added":"already tracking those");
+  render(); refreshWatch();
+};
+
+document.getElementById("add-all").onclick=()=>{
+  const n=addSymbols(moversList().map(r=>r.symbol));
+  setStat(n?n+" added to watchlist":"already tracking those");
+  render(); refreshWatch();
 };
 
 document.body.addEventListener("click",e=>{
