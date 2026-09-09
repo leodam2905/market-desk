@@ -308,9 +308,14 @@ let lastAt=null, busy=false, setupPinned=false, liveCount=0;
 /* ---------- storage ---------- */
 function load(){
   try{
-    const r=localStorage.getItem(LS); if(r) state=Object.assign(state,JSON.parse(r));
+    const r=localStorage.getItem(LS);
+    const saved=r?JSON.parse(r):null;
+    if(saved) state=Object.assign(state,saved);
     const n=localStorage.getItem(LS+".names"); if(n) names=JSON.parse(n);
-    if(state.sortV!==1){ state.sort={by:"vol",dir:-1}; state.sortV=1; save(); }
+    // Data saved before the volume default has no sortV of its own. Test the
+    // stored object, not the merged state — Object.assign leaves the default
+    // in place for absent keys, which would make this check always pass.
+    if(saved && saved.sortV!==1){ state.sort={by:"vol",dir:-1}; state.sortV=1; save(); }
   }catch(e){}
 }
 function save(){
