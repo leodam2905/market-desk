@@ -294,7 +294,7 @@ const PG  = "https://api.polygon.io";
 
 let state = {
   keys:{finnhub:"", polygon:""},
-  items:[], sort:{by:"symbol",dir:1}, tab:"watch",
+  items:[], sort:{by:"vol",dir:-1}, tab:"watch", sortV:1,
   mode:"gainers", minPrice:5, minVol:1000000
 };
 let quotes={}, names={};          // finnhub
@@ -310,6 +310,7 @@ function load(){
   try{
     const r=localStorage.getItem(LS); if(r) state=Object.assign(state,JSON.parse(r));
     const n=localStorage.getItem(LS+".names"); if(n) names=JSON.parse(n);
+    if(state.sortV!==1){ state.sort={by:"vol",dir:-1}; state.sortV=1; save(); }
   }catch(e){}
 }
 function save(){
